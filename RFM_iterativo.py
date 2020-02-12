@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Feb 11 10:06:19 2020
-
 @author: dlopezmacias
 """
 
@@ -12,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 from datetime import timedelta
 import datetime
 import os
+import numpy as np
 
 pd.options.mode.chained_assignment = None
 
@@ -43,7 +43,7 @@ def FMClass(x,p,d):
     
 def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
     
-    df = pd.read_csv(filename,sep=';')
+    df = pd.read_csv(filename,sep='|')
     
     print('Working...')
     
@@ -109,15 +109,15 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
     
         globals()['df_%s' % i]['total_days'].astype('timedelta64[D]')
     
-        globals()['df_%s' % i]['total_days'] = globals()['df_%s' % i]['total_days'] / pd.np.timedelta64(1, 'D')
+        globals()['df_%s' % i]['total_days'] = globals()['df_%s' % i]['total_days'] / np.timedelta64(1, 'D')
            
         # Group by user to calculate RFM
         globals()['rfmTable_%s' % i] = globals()['df_%s' % i].groupby(idcustomer).agg({'total_days': lambda x:x.max(), # Recency
                                             idcustomer: lambda x: len(x),  # Frequency
-                                            'tran_amount': lambda x: x.sum()})      # Monetary Value
+                                            sales_column: lambda x: x.sum()})      # Monetary Value
         globals()['rfmTable_%s' % i].rename(columns={'total_days': 'recency', 
                                                      idcustomer: 'frequency', 
-                                                     'tran_amount': 'monetary_value'}, inplace=True)
+                                                     sales_column: 'monetary_value'}, inplace=True)
         #Define the quartiles
         quartiles = globals()['rfmTable_%s' % i].quantile(q=[0.25,0.50,0.75])
      
@@ -158,7 +158,7 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
            
         # Rescale values from 1 - 10 
         
-        rfmSeg['Total Score'] = pd.np.interp(rfmSeg['Total Score'], 
+        rfmSeg['Total Score'] = np.interp(rfmSeg['Total Score'], 
               (rfmSeg['Total Score'].min(), 
                 rfmSeg['Total Score'].max()), (1, 10))
         
