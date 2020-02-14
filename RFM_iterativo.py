@@ -44,7 +44,7 @@ def FMClass(x,p,d):
 def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
     
     df = pd.read_csv(filename,sep='|')
-    
+        
     print('Working...')
     
     # trasnform
@@ -52,23 +52,26 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
     df[date_column] = pd.to_datetime(df[date_column]).dt.date
     
     df = df[pd.notnull(df[idcustomer])]
-      
+          
     # Calculate the period id 
     
     df['period_id'] = df[date_column].map(lambda x: 100*x.year + x.month)
     
-    # We will only consider transactions from the last year
+    # Sort df 
+
+    df = df.sort_values(by=[idcustomer, date_column], ascending=[False, True])
+
+    # Calculate days between purchases 
     
-    # df=df[df['total_days'] < 365]
+    df['previous_visit'] = df.groupby([idcustomer])[date_column].shift()
     
-    """
-    The data will be summarized at customer level by taking number of days to the 
-    latest transaction, sum of all transction amount and total number of 
-    transaction.
+    df['days_bw_visits'] = df[date_column] - df['previous_visit']
     
-    """
+    df['days_bw_visits'] = df['days_bw_visits'].astype('timedelta64[D]')
     
-    # Subset by period id 
+    df['days_bw_visits'] = df['days_bw_visits'].fillna(-1)
+    
+    # Start function
     bar = progressbar.ProgressBar(maxval=len(df['period_id'].unique())).start()
     j = 0     
     
@@ -89,17 +92,13 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
         # Subset by date 
         
         temp_df = df.loc[(df[date_column] > min_date) & (df[date_column] <= max_date)]
-        
-        # globals()['df_%s' % i] = globals()['df_%s' % i].append(temp_df,sort = True)
-        
+               
         globals()['df_%s' % i] = pd.concat([globals()['df_%s' % i], temp_df], ignore_index=True, sort =False)
         
         # Calculate de Recency
         
         sd = globals()['df_%s' % i][date_column].max() + timedelta(days=1)
-        
-        # sd = sd - relativedelta(years=1)
-        
+                
         """
         We will calculate the recency based on a 1 year period, for this, we obtain
         the max date, and subtract 1 year.
@@ -112,12 +111,19 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
         globals()['df_%s' % i]['total_days'] = globals()['df_%s' % i]['total_days'] / np.timedelta64(1, 'D')
            
         # Group by user to calculate RFM
-        globals()['rfmTable_%s' % i] = globals()['df_%s' % i].groupby(idcustomer).agg({'total_days': lambda x:x.max(), # Recency
+        globals()['rfmTable_%s' % i] = globals()['df_%s' % i].groupby(idcustomer).\
+                                            agg({'total_days': lambda x:x.max(), # Recency
                                             idcustomer: lambda x: len(x),  # Frequency
-                                            sales_column: lambda x: x.sum()})      # Monetary Value
+                                            sales_column: lambda x: x.sum(), # Monetary Value
+                                            'days_bw_visits': lambda x:x.mean()}) # days_btw_visit
+                                                       
         globals()['rfmTable_%s' % i].rename(columns={'total_days': 'recency', 
                                                      idcustomer: 'frequency', 
-                                                     sales_column: 'monetary_value'}, inplace=True)
+                                                     sales_column: 'monetary_value',
+                                                     'days_bw_visits': 'days_bw_visits'}, inplace=True)
+        # Round                                   
+        globals()['rfmTable_%s' % i]['days_bw_visits'] = globals()['rfmTable_%s' % i]['days_bw_visits'].round()
+     
         #Define the quartiles
         quartiles = globals()['rfmTable_%s' % i].quantile(q=[0.25,0.50,0.75])
      
@@ -182,7 +188,7 @@ def RFM_nimerya_iterativo(filename,date_column,idcustomer,sales_column):
         
     bar.finish()
     
-    df_final.to_csv('rfm_'+str(filename), sep='|',index=False)
+    df_final.to_csv('rfm_'+str(filename), sep='|',index=False,decimal = ',')
     
     directory = os.getcwd()
        
